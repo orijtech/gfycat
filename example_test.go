@@ -15,6 +15,7 @@
 package gfycat_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -24,7 +25,7 @@ import (
 func Example_client_Search() {
 	client := new(gfycat.Client)
 
-	res, err := client.Search(&gfycat.Request{
+	res, err := client.Search(context.Background(), &gfycat.Request{
 		Query:  "NBA finals",
 		InTest: true,
 

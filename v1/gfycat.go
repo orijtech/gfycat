@@ -15,6 +15,7 @@
 package gfycat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,9 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/trace"
 
 	"github.com/orijtech/otils"
 )
@@ -147,7 +151,10 @@ type resultsWrap struct {
 	Gfys   []*Gfy `json:"gfycats"`
 }
 
-func (c *Client) Search(req *Request) (*SearchResponse, error) {
+func (c *Client) Search(ctx context.Context, req *Request) (*SearchResponse, error) {
+	ctx, span := trace.StartSpan(ctx, "gfycat/v1.(*Client).Search")
+	defer span.End()
+
 	if req == nil {
 		req = new(Request)
 	}
@@ -190,18 +197,24 @@ func (c *Client) Search(req *Request) (*SearchResponse, error) {
 				return
 			}
 
+			cctx, span := trace.StartSpan(ctx, "paging")
+			span.Annotate([]trace.Attribute{
+				trace.Int64Attribute("page", int64(pageNumber)),
+			}, "page")
+
 			theURL := fmt.Sprintf("%s/search", req.baseURL())
 			if len(qv) > 0 {
 				theURL = fmt.Sprintf("%s?%s", theURL, qv.Encode())
 			}
 			httpReq, err := http.NewRequest("GET", theURL, nil)
 			if err != nil {
+				span.End()
 				page.Err = err
 				pagesChan <- page
 				return
 			}
 
-			slurp, _, err := c.doHTTPReq(httpReq)
+			slurp, _, err := c.doHTTPReq(cctx, httpReq)
 			if err != nil {
 				page.Err = err
 				pagesChan <- page
@@ -209,7 +222,9 @@ func (c *Client) Search(req *Request) (*SearchResponse, error) {
 			}
 
 			rWrap := new(resultsWrap)
-			if err := json.Unmarshal(slurp, rWrap); err != nil {
+			err = json.Unmarshal(slurp, rWrap)
+			span.End()
+			if err != nil {
 				page.Err = err
 				pagesChan <- page
 				return
@@ -247,7 +262,10 @@ func (c *Client) Search(req *Request) (*SearchResponse, error) {
 	return sres, nil
 }
 
-func (c *Client) doHTTPReq(req *http.Request) ([]byte, http.Header, error) {
+func (c *Client) doHTTPReq(ctx context.Context, req *http.Request) ([]byte, http.Header, error) {
+	ctx, span := trace.StartSpan(ctx, "gfycat/v1.(*Client).doHTTPReq")
+	defer span.End()
+
 	res, err := c.httpClient().Do(req)
 	if err != nil {
 		return nil, nil, err
@@ -274,5 +292,5 @@ func (c *Client) httpClient() *http.Client {
 	rt := c.rt
 	c.RUnlock()
 
-	return &http.Client{Transport: rt}
+	return &http.Client{Transport: &ochttp.Transport{Base: rt}}
 }
