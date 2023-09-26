@@ -37,7 +37,7 @@ func Example_client_Search() {
 
 	for page := range res.Pages {
 		if page.Err != nil {
-			fmt.Printf("%#d: err: %v\n", page.PageNumber, page.Err)
+			fmt.Printf("#%d: err: %v\n", page.PageNumber, page.Err)
 			continue
 		}
 
